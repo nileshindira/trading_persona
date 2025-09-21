@@ -1,0 +1,32 @@
+# Trading Persona Analyzer Configuration
+
+ollama:
+  base_url: "http://localhost:11434"
+  model: "llama2:13b"
+  temperature: 0.7
+  top_p: 0.9
+  max_tokens: 4096
+
+data:
+  date_format: "%Y-%m-%d"
+  datetime_format: "%Y-%m-%d %H:%M:%S"
+  required_columns:
+    - trade_date
+    - symbol
+    - transaction_type
+    - quantity
+    - price
+
+metrics:
+  risk_free_rate: 0.065
+  trading_days_per_year: 252
+
+analysis:
+  min_trades_for_pattern: 10
+  lookback_period_days: 180
+  confidence_threshold: 0.7
+
+report:
+  output_format: ["html", "json"]
+  include_charts: true
+  chart_style: "seaborn"
