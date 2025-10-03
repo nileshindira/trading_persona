@@ -109,12 +109,13 @@ class TradingPatternDetector:
     def detect_hedging(self, df: pd.DataFrame) -> Dict:
         """Detect hedging behavior (simultaneous calls and puts)"""
         hedged_positions = 0
-        
+        df['symbol'] = df['symbol'].astype(str)
         # Group by date and symbol base
         for date in df['trade_date'].dt.date.unique():
             day_trades = df[df['trade_date'].dt.date == date]
             
             # Extract base symbol (remove CALL/PUT)
+            day_trades = day_trades.copy()
             day_trades['base_symbol'] = day_trades['symbol'].str.extract(r'(\w+)')[0]
             
             for base_sym in day_trades['base_symbol'].unique():

@@ -33,28 +33,35 @@ class OllamaAnalyzer:
         }
         
         return analysis
-    
+
     def _prepare_context(self, metrics: Dict, patterns: Dict) -> str:
         """Prepare context for LLM"""
+
+        def safe_convert(o):
+            # Handle numpy / pandas dtypes
+            if hasattr(o, "item"):  # numpy scalar
+                return o.item()
+            return str(o)  # fallback to string
+
         context = f"""
-TRADING METRICS:
-- Total Trades: {metrics.get('total_trades', 0)}
-- Total P&L: ₹{metrics.get('total_pnl', 0):,.2f}
-- Win Rate: {metrics.get('win_rate', 0):.2f}%
-- Sharpe Ratio: {metrics.get('sharpe_ratio', 0):.2f}
-- Max Drawdown: {metrics.get('max_drawdown_pct', 0):.2f}%
-- Average Trade Value: ₹{metrics.get('avg_trade_value', 0):,.2f}
+    TRADING METRICS:
+    - Total Trades: {int(metrics.get('total_trades', 0))}
+    - Total P&L: ₹{float(metrics.get('total_pnl', 0)):,.2f}
+    - Win Rate: {float(metrics.get('win_rate', 0)):.2f}%
+    - Sharpe Ratio: {float(metrics.get('sharpe_ratio', 0)):.2f}
+    - Max Drawdown: {float(metrics.get('max_drawdown_pct', 0)):.2f}%
+    - Average Trade Value: ₹{float(metrics.get('avg_trade_value', 0)):,.2f}
 
-DETECTED PATTERNS:
-- Overtrading: {patterns.get('overtrading', {}).get('detected', False)}
-- Revenge Trading: {patterns.get('revenge_trading', {}).get('detected', False)}
-- Scalping: {patterns.get('scalping', {}).get('detected', False)}
-- Hedging: {patterns.get('hedging', {}).get('detected', False)}
+    DETECTED PATTERNS:
+    - Overtrading: {patterns.get('overtrading', {}).get('detected', False)}
+    - Revenge Trading: {patterns.get('revenge_trading', {}).get('detected', False)}
+    - Scalping: {patterns.get('scalping', {}).get('detected', False)}
+    - Hedging: {patterns.get('hedging', {}).get('detected', False)}
 
-Additional Context:
-{json.dumps(metrics, indent=2)}
-{json.dumps(patterns, indent=2)}
-"""
+    Additional Context:
+    {json.dumps(metrics, indent=2, default=safe_convert)}
+    {json.dumps(patterns, indent=2, default=safe_convert)}
+    """
         return context
     
     def _call_ollama(self, prompt: str, system_prompt: str = "") -> str:

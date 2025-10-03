@@ -7,6 +7,7 @@ import json
 from typing import Dict, List
 from datetime import datetime
 from jinja2 import Template
+import markdown
 
 class ReportGenerator:
     """Generate comprehensive trading reports"""
@@ -21,6 +22,12 @@ class ReportGenerator:
                        trader_name: str = "Trader") -> Dict:
         """Generate complete report"""
         
+        # Convert markdown fields into HTML once here
+        analysis_html = {
+            key: markdown.markdown(analysis.get(key, ''), extensions=["tables", "fenced_code", "nl2br"])
+            for key in ['trader_profile', 'risk_assessment', 'behavioral_insights', 'performance_summary']
+        }
+
         report = {
             'metadata': {
                 'generated_at': datetime.now().isoformat(),
@@ -30,13 +37,13 @@ class ReportGenerator:
             'executive_summary': self._create_executive_summary(metrics, analysis),
             'detailed_metrics': metrics,
             'detected_patterns': patterns,
-            'ai_analysis': analysis,
+            'ai_analysis': analysis_html,   # now HTML safe
             'recommendations': self._format_recommendations(analysis.get('recommendations', '')),
             'risk_score': self._calculate_risk_score(metrics, patterns)
         }
-        
+
         return report
-    
+
     def _create_executive_summary(self, metrics: Dict, analysis: Dict) -> Dict:
         """Create executive summary"""
         return {
@@ -48,12 +55,12 @@ class ReportGenerator:
             'trading_style': self._determine_trading_style(metrics, {}),
             'overall_verdict': analysis.get('performance_summary', '')[:200]
         }
-    
+
     def _get_risk_level(self, metrics: Dict) -> str:
         """Determine risk level"""
         sharpe = metrics.get('sharpe_ratio', 0)
         drawdown = abs(metrics.get('max_drawdown_pct', 0))
-        
+
         if sharpe < 0 or drawdown > 30:
             return "VERY HIGH"
         elif sharpe < 0.5 or drawdown > 20:
@@ -62,11 +69,11 @@ class ReportGenerator:
             return "MEDIUM"
         else:
             return "LOW"
-    
+
     def _determine_trading_style(self, metrics: Dict, patterns: Dict) -> str:
         """Determine trading style"""
         avg_trades_per_day = metrics.get('avg_trades_per_day', 0)
-        
+
         if avg_trades_per_day > 10:
             return "High-Frequency Scalper"
         elif avg_trades_per_day > 5:
@@ -75,17 +82,17 @@ class ReportGenerator:
             return "Active Trader"
         else:
             return "Position Trader"
-    
+
     def _format_recommendations(self, recommendations_text: str) -> List[str]:
         """Format recommendations as list"""
         lines = recommendations_text.split('\n')
         recs = [line.strip() for line in lines if line.strip() and (line.strip().startswith('-') or line.strip().startswith('•') or line.strip().startswith('*'))]
         return recs[:10] if recs else ["Focus on risk management", "Reduce trading frequency", "Implement strict stop losses"]
-    
+
     def _calculate_risk_score(self, metrics: Dict, patterns: Dict) -> int:
         """Calculate risk score 0-100"""
         score = 50  # Base score
-        
+
         # Adjust based on metrics
         if metrics.get('sharpe_ratio', 0) < 0:
             score += 20
@@ -93,21 +100,22 @@ class ReportGenerator:
             score += 15
         if metrics.get('win_rate', 50) < 45:
             score += 10
-        
+
         # Adjust based on patterns
         if patterns.get('overtrading', {}).get('detected', False):
             score += 10
         if patterns.get('revenge_trading', {}).get('detected', False):
             score += 10
-        
+
         return min(100, max(0, score))
-    
+
     def export_html(self, report: Dict, filepath: str):
         """Export report as HTML"""
         html_template = """
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>Trading Analysis Report - {{ report.metadata.trader_name }}</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
@@ -126,7 +134,17 @@ class ReportGenerator:
         .recommendations { background: #ecf0f1; padding: 20px; border-radius: 5px; margin-top: 20px; }
         .recommendations li { margin: 10px 0; }
         .analysis-section { margin: 20px 0; padding: 15px; background: #f8f9fa; border-left: 4px solid #3498db; }
+        .analysis-section p { margin: 8px 0; }
+        .analysis-section ul { padding-left: 20px; margin: 10px 0; }
+        .analysis-section li { margin: 5px 0; }
+        .analysis-section strong { color: #2c3e50; }
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #7f8c8d; }
+        .analysis-section table {width: 100%;border-collapse: collapse;margin: 15px 0;font-size: 14px;}
+        .analysis-section table th,
+        .analysis-section table td {border: 1px solid #ddd;padding: 8px;text-align: left;}
+        .analysis-section table th {background: #f2f2f2;font-weight: bold;}
+        .analysis-section ul {list-style: disc inside;margin: 10px 0 10px 20px;padding: 0;}
+        .analysis-section li {margin: 6px 0;}
     </style>
 </head>
 <body>
@@ -169,17 +187,17 @@ class ReportGenerator:
         
         <div class="analysis-section">
             <h3>Trader Profile</h3>
-            <p>{{ report.ai_analysis.trader_profile }}</p>
+            <div>{{ report.ai_analysis.trader_profile | safe }}</div>
         </div>
         
         <div class="analysis-section">
             <h3>Risk Assessment</h3>
-            <p>{{ report.ai_analysis.risk_assessment }}</p>
+            <div>{{ report.ai_analysis.risk_assessment | safe }}</div>
         </div>
         
         <div class="analysis-section">
             <h3>Behavioral Insights</h3>
-            <p>{{ report.ai_analysis.behavioral_insights }}</p>
+            <div>{{ report.ai_analysis.behavioral_insights | safe }}</div>
         </div>
         
         <h2>🔍 Detected Patterns</h2>
@@ -205,7 +223,7 @@ class ReportGenerator:
         </div>
         
         <h2>📈 Performance Summary</h2>
-        <p>{{ report.ai_analysis.performance_summary }}</p>
+        <div>{{ report.ai_analysis.performance_summary | safe }}</div>
         
         <div class="footer">
             <p>This report was generated using AI-powered analysis. Not financial advice.</p>
@@ -218,11 +236,19 @@ class ReportGenerator:
         
         template = Template(html_template)
         html_content = template.render(report=report)
-        
-        with open(filepath, 'w') as f:
+
+        with open(filepath, 'w', encoding='utf-8') as f:
             f.write(html_content)
-    
+
     def export_json(self, report: Dict, filepath: str):
         """Export report as JSON"""
+
+        def safe_convert(o):
+            if hasattr(o, "item"):  # NumPy scalar
+                return o.item()
+            if isinstance(o, (set,)):
+                return list(o)  # convert sets to lists if needed
+            return str(o)  # fallback
+
         with open(filepath, 'w') as f:
-            json.dump(report, f, indent=2)
+            json.dump(report, f, indent=2, default=safe_convert)
