@@ -1,6 +1,6 @@
 # 🚀 Trading Persona Analyzer - Dhan Edition
 
-AI-powered trading analysis system using local LLMs (Ollama) to analyze trading patterns, detect behavioral issues, and provide actionable insights.
+AI-powered trading analysis system using local LLMs (Ollama) to analyze trading patterns, detect behavioral issues, and provide actionable insights with **EMA-based market context**.
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -10,10 +10,25 @@ AI-powered trading analysis system using local LLMs (Ollama) to analyze trading 
 
 - 📊 **Comprehensive Metrics**: Sharpe ratio, max drawdown, win rate, and 20+ metrics
 - 🔍 **Pattern Detection**: Identifies overtrading, revenge trading, scalping, hedging
+- 📈 **EMA Allocation Scores**: Market context with stock, Nifty & Midcap EMA analysis
 - 🤖 **AI Analysis**: Uses Ollama (Llama2, Mixtral) for natural language insights
-- 📈 **Professional Reports**: Generates HTML and JSON reports
+- 📄 **Professional Reports**: Generates HTML, JSON and enriched CSV with EMA scores
 - 🔒 **Privacy First**: All analysis runs locally, no data leaves your machine
 - 🌐 **Multi-Broker**: Works with Dhan, Zerodha, Upstox, and any broker
+
+## ✨ NEW: EMA Allocation Score Feature
+
+Automatically calculates **EMA-based market trend scores** (-6 to +6) for:
+- 📉 **Stock/Index being traded** (ema_score_stock)
+- 📊 **Nifty 50 Index** (ema_score_nifty) - Broad market context
+- 📈 **Midcap Nifty** (ema_score_midcap) - Mid-cap segment context
+
+This helps you understand:
+- Are you trading with or against market trends?
+- Do your losses correlate with adverse market conditions?
+- What's your performance in different market regimes?
+
+[📖 Read full EMA documentation](docs/EMA_ALLOCATION_GUIDE.md)
 
 ## 🚀 Quick Start
 
@@ -52,8 +67,11 @@ pip install -r requirements.txt
 ### Run Analysis
 
 ```bash
-# Analyze your trades
+# Analyze your trades with EMA scores (default)
 python main.py data/sample_trades.csv --trader-name "Your Name"
+
+# Skip EMA calculation for faster analysis
+python main.py data/sample_trades.csv --trader-name "Your Name" --no-ema
 
 # View report
 open data/reports/Your_Name_report.html
@@ -77,11 +95,19 @@ Detected Patterns:
 
 Risk Score: 78/100
 
+==================================================
+EMA ALLOCATION SCORES
+==================================================
+Stock EMA (Avg): 3.45      ← Stock in uptrend
+Nifty EMA (Avg): 2.80      ← Market moderately bullish
+Midcap EMA (Avg): 1.20     ← Midcaps weakly bullish
+
 Recommendations:
 • Reduce trading frequency by 70%
 • Implement daily loss limits
 • Focus on 2-3 high-conviction trades
 • Avoid trading after losses
+• Your losses correlate with weak market conditions (EMA < 0)
 ```
 
 ## 📁 Project Structure
@@ -93,13 +119,17 @@ trade_analysis_dhan/
 │   ├── data_processor.py      # Data loading and cleaning
 │   ├── metrics_calculator.py  # Calculate trading metrics
 │   ├── pattern_detector.py    # Detect trading patterns
+│   ├── ema_calculator.py      # 🆕 EMA allocation scores
 │   ├── llm_analyzer.py         # Ollama integration
 │   └── report_generator.py    # Generate reports
 │
 ├── data/
 │   ├── raw/                    # Your trading data
 │   ├── processed/              # Processed data
-│   └── reports/                # Generated reports
+│   └── reports/                # Generated reports + CSV with EMA
+│
+├── docs/
+│   └── EMA_ALLOCATION_GUIDE.md # 🆕 EMA feature documentation
 │
 ├── config.yaml                 # Configuration
 ├── main.py                     # Main application
@@ -123,6 +153,11 @@ trade_date,symbol,transaction_type,quantity,price
 - `quantity`: Number of units
 - `price`: Price per unit
 
+**Output includes additional columns:**
+- `ema_score_stock`: EMA score for traded stock/index (-6 to +6)
+- `ema_score_nifty`: EMA score for Nifty 50 (-6 to +6)
+- `ema_score_midcap`: EMA score for Nifty Midcap (-6 to +6)
+
 ## 🔌 API Integration
 
 ### Extract from Dhan
@@ -142,6 +177,46 @@ from extractors import ZerodhaExtractor
 extractor = ZerodhaExtractor(api_key="YOUR_KEY")
 trades = extractor.extract_trades()
 ```
+
+## 📈 EMA Allocation Usage
+
+### Programmatic Access
+
+```python
+from src.ema_calculator import EMACalculator
+
+# Initialize calculator
+calculator = EMACalculator(config)
+
+# Calculate EMA score for any symbol
+score, ema_values = calculator.calculate_emas_for_symbol(
+    symbol='RELIANCE',
+    exchange='NSE',
+    target_date=datetime(2025, 9, 10)
+)
+
+print(f"EMA Score: {score}/6")
+print(f"Close: {ema_values['close']}")
+print(f"EMA21: {ema_values['ema21']}")
+
+# Add scores to your dataframe
+df_with_ema = calculator.add_ema_scores_to_trades(df)
+
+# Get summary statistics
+stats = calculator.get_ema_summary_stats(df_with_ema)
+```
+
+### Score Interpretation
+
+| Score | Meaning | Action |
+|-------|---------|--------|
+| +6 | Extremely Bullish | Maximum allocation |
+| +4 to +5 | Strong Bullish | High allocation |
+| +1 to +3 | Moderately Bullish | Medium allocation |
+| 0 | Neutral | Cautious |
+| -1 to -3 | Moderately Bearish | Low allocation |
+| -4 to -5 | Strong Bearish | Minimal allocation |
+| -6 | Extremely Bearish | No allocation |
 
 ## 🛠️ Configuration
 
@@ -171,6 +246,25 @@ Contributions welcome! Please:
 
 MIT License - see [LICENSE](LICENSE) file
 
+## 🐛 Troubleshooting
+
+### EMA Calculation Issues
+
+If you encounter issues with EMA scores:
+
+```bash
+# Check tvDatafeed installation
+pip install tvDatafeed
+
+# Run without EMA for testing
+python main.py data/sample_trades.csv --no-ema
+
+# Check logs for specific errors
+tail -f trade_analysis.log
+```
+
+See [EMA Troubleshooting Guide](docs/EMA_ALLOCATION_GUIDE.md#troubleshooting) for more details.
+
 ## ⚠️ Disclaimer
 
 This tool provides analytical insights only. Not financial advice. Trade at your own risk.
@@ -179,6 +273,7 @@ This tool provides analytical insights only. Not financial advice. Trade at your
 
 - Ollama team for local LLM infrastructure
 - Trading community for patterns and insights
+- [tvDatafeed](https://github.com/rongardF/tvdatafeed) for market data access
 - Open source contributors
 
 ---
@@ -186,3 +281,9 @@ This tool provides analytical insights only. Not financial advice. Trade at your
 **Made with ❤️ for traders who want to improve**
 
 ⭐ Star this repo if you find it helpful!
+
+## 📚 Documentation
+
+- [EMA Allocation Guide](docs/EMA_ALLOCATION_GUIDE.md) - Complete guide to EMA features
+- [Contributing Guidelines](CONTRIBUTING.md) - How to contribute
+- [Changelog](CHANGELOG.md) - Version history
