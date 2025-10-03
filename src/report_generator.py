@@ -227,7 +227,8 @@ class ReportGenerator:
         
         <div class="footer">
             <p>This report was generated using AI-powered analysis. Not financial advice.</p>
-            <p>Made with ❤️ by Trade Analysis Dhan</p>
+            <p>Made by Nilesh Tiwari</p>
+            
         </div>
     </div>
 </body>
