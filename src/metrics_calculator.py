@@ -1,125 +1,197 @@
-import yaml
+"""
+Metrics Calculator Module
+Calculates comprehensive trading performance metrics
+"""
+
+import pandas as pd
+import numpy as np
+from typing import Dict
 import logging
-import argparse
-from pathlib import Path
-import sys
-import yaml
 
-from src.data_processor import TradingDataProcessor
-from src.metrics_calculator import TradingMetricsCalculator
-from src.pattern_detector import TradingPatternDetector
-# from src.llm_analyzer import OllamaAnalyzer
-from src.llm_analyzer import OpenRouterAnalyzer
-from src.report_generator import ReportGenerator
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-
-class TradingPersonaAnalyzer:
-    # \"\"\"Main application class\"\"\"
-
-    def __init__(self, config_path: str = "config.yaml"):
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-
-        self.data_processor = TradingDataProcessor(self.config)
-        self.metrics_calculator = TradingMetricsCalculator(self.config)
-        self.pattern_detector = TradingPatternDetector(self.config)
-        self.llm_analyzer = OpenRouterAnalyzer(self.config)
-        self.report_generator = ReportGenerator(self.config)
-
-    def analyze(self, data_filepath: str, trader_name: str = "Trader", output_dir: str = "data/reports"):
-        # \"\"\"Run complete analysis pipeline\"\"\"
-
-        logger.info(f"Starting analysis for {trader_name}")
-
-        # Step 1: Load and process data
-        logger.info("Loading data...")
-        df = self.data_processor.load_data(data_filepath)
-
-        # Validate data
-        is_valid, missing_cols = self.data_processor.validate_data(df)
-        if not is_valid:
-            logger.error(f"Missing required columns: {missing_cols}")
-            return None
-
-        # Clean data
-        logger.info("Cleaning data...")
-        df = self.data_processor.clean_data(df)
-
-        # Pair trades for P&L
-        logger.info("Pairing trades...")
-        df = self.data_processor.pair_trades(df)
-
-        # Step 2: Calculate metrics
-        logger.info("Calculating metrics...")
-        metrics = self.metrics_calculator.calculate_all_metrics(df)
-
-        # Step 3: Detect patterns
-        logger.info("Detecting patterns...")
-        patterns = self.pattern_detector.detect_all_patterns(df)
-
-        # Step 4: LLM Analysis
-        logger.info("Generating AI analysis...")
-        analysis = self.llm_analyzer.generate_analysis(metrics, patterns)
-
-        # Step 5: Generate report
-        logger.info("Generating report...")
-        report = self.report_generator.generate_report(
-            metrics, patterns, analysis, trader_name
-        )
-
-        # Step 6: Export report
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        # Export as JSON
-        json_path = output_path / f"{trader_name}_report.json"
-        self.report_generator.export_json(report, str(json_path))
-        logger.info(f"JSON report saved to {json_path}")
-
-        # Export as HTML
-        html_path = output_path / f"{trader_name}_report.html"
-        self.report_generator.export_html(report, str(html_path))
-        logger.info(f"HTML report saved to {html_path}")
-
-        logger.info("Analysis complete!")
-
-        return report
-
-
-def main():
-    parser = argparse.ArgumentParser(description='Trading Persona Analyzer')
-    parser.add_argument('data_file', help='Path to trading data CSV file')
-    parser.add_argument('--trader-name', default='Trader', help='Trader name for report')
-    parser.add_argument('--config', default='config.yaml', help='Config file path')
-    parser.add_argument('--output-dir', default='data/reports', help='Output directory')
-
-    args = parser.parse_args()
-
-    analyzer = TradingPersonaAnalyzer(args.config)
-    report = analyzer.analyze(args.data_file, args.trader_name, args.output_dir)
-
-    if report:
-        print("\\n" + "=" * 50)
-        print("ANALYSIS COMPLETE")
-        print("=" * 50)
-        print(f"\\nTrader: {args.trader_name}")
-        print(f"Total Trades: {report['executive_summary']['total_trades']}")
-        print(f"Net P&L: ₹{report['executive_summary']['net_pnl']:,.2f}")
-        print(f"Win Rate: {report['executive_summary']['win_rate']:.1f}%")
-        print(f"Risk Level: {report['executive_summary']['risk_level']}")
-        print(f"\\nRisk Score: {report['risk_score']}/100")
-        print("\\nReports generated successfully!")
-    else:
-        print("Analysis failed!")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+class TradingMetricsCalculator:
+    """Calculate comprehensive trading metrics"""
+    
+    def __init__(self, config: Dict):
+        self.config = config
+        self.risk_free_rate = config['metrics']['risk_free_rate']
+        self.trading_days = config['metrics']['trading_days_per_year']
+        self.logger = logging.getLogger(__name__)
+    
+    def calculate_all_metrics(self, df: pd.DataFrame) -> Dict:
+        """Calculate all trading metrics"""
+        
+        metrics = {
+            'total_trades': len(df),
+            'total_pnl': self.calculate_total_pnl(df),
+            'win_rate': self.calculate_win_rate(df),
+            'avg_win': self.calculate_avg_win(df),
+            'avg_loss': self.calculate_avg_loss(df),
+            'profit_factor': self.calculate_profit_factor(df),
+            'sharpe_ratio': self.calculate_sharpe_ratio(df),
+            'sortino_ratio': self.calculate_sortino_ratio(df),
+            'max_drawdown': self.calculate_max_drawdown(df),
+            'max_drawdown_pct': self.calculate_max_drawdown_pct(df),
+            'avg_trade_value': self.calculate_avg_trade_value(df),
+            'largest_win': self.calculate_largest_win(df),
+            'largest_loss': self.calculate_largest_loss(df),
+            'consecutive_wins': self.calculate_consecutive_wins(df),
+            'consecutive_losses': self.calculate_consecutive_losses(df),
+            'avg_holding_period': self.calculate_avg_holding_period(df),
+            'avg_trades_per_day': self.calculate_avg_trades_per_day(df),
+            'date_range': self.get_date_range(df),
+            'trading_days': self.get_trading_days(df)
+        }
+        
+        # Add metrics that may have been added (like EMA)
+        if 'ema_allocation' in df.columns or any(col.startswith('ema_score') for col in df.columns):
+            metrics['ema_enabled'] = True
+        
+        return metrics
+    
+    def calculate_total_pnl(self, df: pd.DataFrame) -> float:
+        """Calculate total P&L"""
+        return float(df['pnl'].sum())
+    
+    def calculate_win_rate(self, df: pd.DataFrame) -> float:
+        """Calculate win rate percentage"""
+        if len(df) == 0:
+            return 0.0
+        winning_trades = len(df[df['pnl'] > 0])
+        return float(winning_trades / len(df) * 100)
+    
+    def calculate_avg_win(self, df: pd.DataFrame) -> float:
+        """Calculate average winning trade"""
+        winning_trades = df[df['pnl'] > 0]['pnl']
+        return float(winning_trades.mean()) if len(winning_trades) > 0 else 0.0
+    
+    def calculate_avg_loss(self, df: pd.DataFrame) -> float:
+        """Calculate average losing trade"""
+        losing_trades = df[df['pnl'] < 0]['pnl']
+        return float(losing_trades.mean()) if len(losing_trades) > 0 else 0.0
+    
+    def calculate_profit_factor(self, df: pd.DataFrame) -> float:
+        """Calculate profit factor (gross profit / gross loss)"""
+        gross_profit = df[df['pnl'] > 0]['pnl'].sum()
+        gross_loss = abs(df[df['pnl'] < 0]['pnl'].sum())
+        
+        if gross_loss == 0:
+            return float('inf') if gross_profit > 0 else 0.0
+        
+        return float(gross_profit / gross_loss)
+    
+    def calculate_sharpe_ratio(self, df: pd.DataFrame) -> float:
+        """Calculate Sharpe ratio"""
+        if len(df) < 2:
+            return 0.0
+        
+        returns = df['pnl'] / df['trade_value']
+        
+        if returns.std() == 0:
+            return 0.0
+        
+        excess_return = returns.mean() - (self.risk_free_rate / self.trading_days)
+        sharpe = excess_return / returns.std() * np.sqrt(self.trading_days)
+        
+        return float(sharpe)
+    
+    def calculate_sortino_ratio(self, df: pd.DataFrame) -> float:
+        """Calculate Sortino ratio (uses downside deviation)"""
+        if len(df) < 2:
+            return 0.0
+        
+        returns = df['pnl'] / df['trade_value']
+        
+        # Calculate downside deviation
+        downside_returns = returns[returns < 0]
+        if len(downside_returns) == 0:
+            return float('inf') if returns.mean() > 0 else 0.0
+        
+        downside_std = downside_returns.std()
+        if downside_std == 0:
+            return 0.0
+        
+        excess_return = returns.mean() - (self.risk_free_rate / self.trading_days)
+        sortino = excess_return / downside_std * np.sqrt(self.trading_days)
+        
+        return float(sortino)
+    
+    def calculate_max_drawdown(self, df: pd.DataFrame) -> float:
+        """Calculate maximum drawdown in rupees"""
+        df_sorted = df.sort_values('trade_date')
+        cumulative_pnl = df_sorted['pnl'].cumsum()
+        
+        running_max = cumulative_pnl.cummax()
+        drawdown = cumulative_pnl - running_max
+        
+        return float(drawdown.min())
+    
+    def calculate_max_drawdown_pct(self, df: pd.DataFrame) -> float:
+        """Calculate maximum drawdown percentage"""
+        df_sorted = df.sort_values('trade_date')
+        cumulative_pnl = df_sorted['pnl'].cumsum()
+        
+        running_max = cumulative_pnl.cummax()
+        drawdown_pct = ((cumulative_pnl - running_max) / running_max.replace(0, 1)) * 100
+        
+        return float(drawdown_pct.min())
+    
+    def calculate_avg_trade_value(self, df: pd.DataFrame) -> float:
+        """Calculate average trade value"""
+        return float(df['trade_value'].mean())
+    
+    def calculate_largest_win(self, df: pd.DataFrame) -> float:
+        """Calculate largest single win"""
+        return float(df['pnl'].max()) if len(df) > 0 else 0.0
+    
+    def calculate_largest_loss(self, df: pd.DataFrame) -> float:
+        """Calculate largest single loss"""
+        return float(df['pnl'].min()) if len(df) > 0 else 0.0
+    
+    def calculate_consecutive_wins(self, df: pd.DataFrame) -> int:
+        """Calculate maximum consecutive wins"""
+        df_sorted = df.sort_values('trade_date')
+        max_consecutive = 0
+        current_consecutive = 0
+        
+        for pnl in df_sorted['pnl']:
+            if pnl > 0:
+                current_consecutive += 1
+                max_consecutive = max(max_consecutive, current_consecutive)
+            else:
+                current_consecutive = 0
+        
+        return int(max_consecutive)
+    
+    def calculate_consecutive_losses(self, df: pd.DataFrame) -> int:
+        """Calculate maximum consecutive losses"""
+        df_sorted = df.sort_values('trade_date')
+        max_consecutive = 0
+        current_consecutive = 0
+        
+        for pnl in df_sorted['pnl']:
+            if pnl < 0:
+                current_consecutive += 1
+                max_consecutive = max(max_consecutive, current_consecutive)
+            else:
+                current_consecutive = 0
+        
+        return int(max_consecutive)
+    
+    def calculate_avg_holding_period(self, df: pd.DataFrame) -> float:
+        """Calculate average holding period in minutes"""
+        return float(df['holding_period_minutes'].mean()) if 'holding_period_minutes' in df.columns else 0.0
+    
+    def calculate_avg_trades_per_day(self, df: pd.DataFrame) -> float:
+        """Calculate average trades per day"""
+        trading_days = df['trade_date'].dt.date.nunique()
+        return float(len(df) / trading_days) if trading_days > 0 else 0.0
+    
+    def get_date_range(self, df: pd.DataFrame) -> str:
+        """Get date range of trading data"""
+        start_date = df['trade_date'].min().strftime('%Y-%m-%d')
+        end_date = df['trade_date'].max().strftime('%Y-%m-%d')
+        return f"{start_date} to {end_date}"
+    
+    def get_trading_days(self, df: pd.DataFrame) -> int:
+        """Get number of unique trading days"""
+        return int(df['trade_date'].dt.date.nunique())
