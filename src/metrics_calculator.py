@@ -1,150 +1,204 @@
+"""
+Metrics Calculator Module
+Calculates comprehensive trading performance metrics
+"""
+
 import pandas as pd
 import numpy as np
-from typing import Dict, Tuple
-from scipy import stats
-
-
+from typing import Dict
+import logging
 class TradingMetricsCalculator:
-    ###Calculate comprehensive trading metrics###
 
     def __init__(self, config: Dict):
         self.config = config
         self.risk_free_rate = config['metrics']['risk_free_rate']
         self.trading_days = config['metrics']['trading_days_per_year']
+        self.logger = logging.getLogger(__name__)
 
     def calculate_all_metrics(self, df: pd.DataFrame) -> Dict:
-        ###Calculate all trading metrics###
-        metrics = {}
+        """Calculate all trading metrics"""
 
-        # Basic metrics
-        metrics.update(self.calculate_basic_metrics(df))
+        metrics = {
+            'total_trades': len(df),
+            'total_pnl': self.calculate_total_pnl(df),
+            'win_rate': self.calculate_win_rate(df),
+            'avg_win': self.calculate_avg_win(df),
+            'avg_loss': self.calculate_avg_loss(df),
+            'profit_factor': self.calculate_profit_factor(df),
+            'sharpe_ratio': self.calculate_sharpe_ratio(df),
+            'sortino_ratio': self.calculate_sortino_ratio(df),
+            'max_drawdown': self.calculate_max_drawdown(df),
+            'max_drawdown_pct': self.calculate_max_drawdown_pct(df),
+            'avg_trade_value': self.calculate_avg_trade_value(df),
+            'largest_win': self.calculate_largest_win(df),
+            'largest_loss': self.calculate_largest_loss(df),
+            'consecutive_wins': self.calculate_consecutive_wins(df),
+            'consecutive_losses': self.calculate_consecutive_losses(df),
+            'avg_holding_period': self.calculate_avg_holding_period(df),
+            'avg_trades_per_day': self.calculate_avg_trades_per_day(df),
+            'date_range': self.get_date_range(df),
+            'trading_days': self.get_trading_days(df)
+        }
 
-        # Performance metrics
-        metrics.update(self.calculate_performance_metrics(df))
-
-        # Risk metrics
-        metrics.update(self.calculate_risk_metrics(df))
-
-        # Trading behavior metrics
-        metrics.update(self.calculate_behavior_metrics(df))
+        # Add metrics that may have been added (like EMA)
+        if 'ema_allocation' in df.columns or any(col.startswith('ema_score') for col in df.columns):
+            metrics['ema_enabled'] = True
 
         return metrics
 
-    def calculate_basic_metrics(self, df: pd.DataFrame) -> Dict:
-        ###Calculate basic trading statistics###
-        total_trades = len(df)
-        total_days = (df['trade_date'].max() - df['trade_date'].min()).days
+    def calculate_total_pnl(self, df: pd.DataFrame) -> float:
+        """Calculate total P&L"""
+        return float(df['pnl'].sum())
 
-        return {
-            'total_trades': total_trades,
-            'total_days': total_days,
-            'avg_trades_per_day': total_trades / max(total_days, 1),
-            'total_trade_value': df['trade_value'].sum(),
-            'avg_trade_value': df['trade_value'].mean(),
-            'unique_symbols': df['symbol'].nunique(),
-            'date_range': f"{df['trade_date'].min().date()} to {df['trade_date'].max().date()}"
-        }
+    def calculate_win_rate(self, df: pd.DataFrame) -> float:
+        """Calculate win rate percentage"""
+        if len(df) == 0:
+            return 0.0
+        winning_trades = len(df[df['pnl'] > 0])
+        return float(winning_trades / len(df) * 100)
 
-    def calculate_performance_metrics(self, df: pd.DataFrame) -> Dict:
-        ###Calculate performance-related metrics###
-        total_pnl = df['pnl'].sum()
-        winning_trades = df[df['pnl'] > 0]
-        losing_trades = df[df['pnl'] < 0]
+    def calculate_avg_win(self, df: pd.DataFrame) -> float:
+        """Calculate average winning trade"""
+        winning_trades = df[df['pnl'] > 0]['pnl']
+        return float(winning_trades.mean()) if len(winning_trades) > 0 else 0.0
 
-        win_rate = len(winning_trades) / len(df) if len(df) > 0 else 0
+    def calculate_avg_loss(self, df: pd.DataFrame) -> float:
+        """Calculate average losing trade"""
+        losing_trades = df[df['pnl'] < 0]['pnl']
+        return float(losing_trades.mean()) if len(losing_trades) > 0 else 0.0
 
-        avg_win = winning_trades['pnl'].mean() if len(winning_trades) > 0 else 0
-        avg_loss = losing_trades['pnl'].mean() if len(losing_trades) > 0 else 0
+    def calculate_profit_factor(self, df: pd.DataFrame) -> float:
+        """Calculate profit factor (gross profit / gross loss)"""
+        gross_profit = df[df['pnl'] > 0]['pnl'].sum()
+        gross_loss = abs(df[df['pnl'] < 0]['pnl'].sum())
 
-        profit_factor = abs(winning_trades['pnl'].sum() / losing_trades['pnl'].sum()) if losing_trades[
-                                                                                             'pnl'].sum() != 0 else 0
+        if gross_loss == 0:
+            return float('inf') if gross_profit > 0 else 0.0
 
-        return {
-            'total_pnl': total_pnl,
-            'winning_trades': len(winning_trades),
-            'losing_trades': len(losing_trades),
-            'win_rate': win_rate * 100,
-            'avg_win': avg_win,
-            'avg_loss': avg_loss,
-            'largest_win': winning_trades['pnl'].max() if len(winning_trades) > 0 else 0,
-            'largest_loss': losing_trades['pnl'].min() if len(losing_trades) > 0 else 0,
-            'profit_factor': profit_factor,
-            'expectancy': (win_rate * avg_win) + ((1 - win_rate) * avg_loss)
-        }
+        return float(gross_profit / gross_loss)
 
-    def calculate_risk_metrics(self, df: pd.DataFrame) -> Dict:
-        # ###Calculate risk-related metrics###
-        daily_returns = df.groupby(df['trade_date'].dt.date)['pnl'].sum()
+    def calculate_sharpe_ratio(self, df: pd.DataFrame) -> float:
+        """Calculate Sharpe ratio"""
+        if len(df) < 2:
+            return 0.0
 
-        if len(daily_returns) > 1:
-            sharpe_ratio = self.calculate_sharpe_ratio(daily_returns)
-            max_drawdown, max_drawdown_pct = self.calculate_max_drawdown(daily_returns)
-            sortino_ratio = self.calculate_sortino_ratio(daily_returns)
-        else:
-            sharpe_ratio = 0
-            max_drawdown = 0
-            max_drawdown_pct = 0
-            sortino_ratio = 0
+        returns = df['pnl'] / df['trade_value']
 
-        return {
-            'volatility': daily_returns.std(),
-            'sharpe_ratio': sharpe_ratio,
-            'sortino_ratio': sortino_ratio,
-            'max_drawdown': max_drawdown,
-            'max_drawdown_pct': max_drawdown_pct,
-            'daily_var_95': np.percentile(daily_returns, 5),
-            'calmar_ratio': abs(daily_returns.mean() / max_drawdown) if max_drawdown != 0 else 0
-        }
+        if returns.std() == 0:
+            return 0.0
 
-    def calculate_behavior_metrics(self, df: pd.DataFrame) -> Dict:
-        # ###Calculate trading behavior metrics###
-        # Holding period analysis
-        avg_holding_period = df['holding_period_minutes'].mean()
+        excess_return = returns.mean() - (self.risk_free_rate / self.trading_days)
+        sharpe = excess_return / returns.std() * np.sqrt(self.trading_days)
 
-        # Time of day analysis
-        hour_distribution = df['trade_hour'].value_counts().to_dict()
-        most_active_hour = df['trade_hour'].mode()[0] if len(df) > 0 else 0
+        return float(sharpe)
 
-        # Position sizing analysis
-        avg_lot_size = df['quantity'].mean()
-        max_lot_size = df['quantity'].max()
+    def calculate_sortino_ratio(self, df: pd.DataFrame) -> float:
+        """Calculate Sortino ratio (uses downside deviation)"""
+        if len(df) < 2:
+            return 0.0
 
-        # Instrument preference
-        top_symbols = df['symbol'].value_counts().head(5).to_dict()
+        returns = df['pnl'] / df['trade_value']
 
-        return {
-            'avg_holding_period_minutes': avg_holding_period,
-            'most_active_hour': most_active_hour,
-            'hour_distribution': hour_distribution,
-            'avg_lot_size': avg_lot_size,
-            'max_lot_size': max_lot_size,
-            'position_size_std': df['quantity'].std(),
-            'top_traded_symbols': top_symbols
-        }
-
-    def calculate_sharpe_ratio(self, returns: pd.Series) -> float:
-        # ###Calculate Sharpe Ratio###
-        excess_returns = returns - (self.risk_free_rate / self.trading_days)
-        if excess_returns.std() == 0:
-            return 0
-        return np.sqrt(self.trading_days) * (excess_returns.mean() / excess_returns.std())
-
-    def calculate_sortino_ratio(self, returns: pd.Series) -> float:
-        # ###Calculate Sortino Ratio###
-        excess_returns = returns - (self.risk_free_rate / self.trading_days)
+        # Calculate downside deviation
         downside_returns = returns[returns < 0]
+        if len(downside_returns) == 0:
+            return float('inf') if returns.mean() > 0 else 0.0
 
-        if len(downside_returns) == 0 or downside_returns.std() == 0:
-            return 0
+        downside_std = downside_returns.std()
+        if downside_std == 0:
+            return 0.0
 
-        return np.sqrt(self.trading_days) * (excess_returns.mean() / downside_returns.std())
+        excess_return = returns.mean() - (self.risk_free_rate / self.trading_days)
+        sortino = excess_return / downside_std * np.sqrt(self.trading_days)
+
+        return float(sortino)
+
+    def calculate_max_drawdown(self, df: pd.DataFrame) -> float:
+        """Calculate maximum drawdown in rupees"""
+        df_sorted = df.sort_values('trade_date')
+        cumulative_pnl = df_sorted['pnl'].cumsum()
+
+        running_max = cumulative_pnl.cummax()
+        drawdown = cumulative_pnl - running_max
+
+        return float(drawdown.min())
+
+    def calculate_max_drawdown_pct(self, df: pd.DataFrame) -> float:
+        """Calculate maximum drawdown percentage"""
+        df_sorted = df.sort_values('trade_date')
+        cumulative_pnl = df_sorted['pnl'].cumsum()
+
+        running_max = cumulative_pnl.cummax()
+        drawdown_pct = ((cumulative_pnl - running_max) / running_max.replace(0, 1)) * 100
+
+        return float(drawdown_pct.min())
+
+    def calculate_avg_trade_value(self, df: pd.DataFrame) -> float:
+        """Calculate average trade value"""
+        return float(df['trade_value'].mean())
+
+    def calculate_largest_win(self, df: pd.DataFrame) -> float:
+        """Calculate largest single win"""
+        return float(df['pnl'].max()) if len(df) > 0 else 0.0
+
+    def calculate_largest_loss(self, df: pd.DataFrame) -> float:
+        """Calculate largest single loss"""
+        return float(df['pnl'].min()) if len(df) > 0 else 0.0
+
+    def calculate_consecutive_wins(self, df: pd.DataFrame) -> int:
+        """Calculate maximum consecutive wins"""
+        df_sorted = df.sort_values('trade_date')
+        max_consecutive = 0
+        current_consecutive = 0
+
+        for pnl in df_sorted['pnl']:
+            if pnl > 0:
+                current_consecutive += 1
+                max_consecutive = max(max_consecutive, current_consecutive)
+            else:
+                current_consecutive = 0
+
+        return int(max_consecutive)
+
+    def calculate_consecutive_losses(self, df: pd.DataFrame) -> int:
+        """Calculate maximum consecutive losses"""
+        df_sorted = df.sort_values('trade_date')
+        max_consecutive = 0
+        current_consecutive = 0
+
+        for pnl in df_sorted['pnl']:
+            if pnl < 0:
+                current_consecutive += 1
+                max_consecutive = max(max_consecutive, current_consecutive)
+            else:
+                current_consecutive = 0
+
+        return int(max_consecutive)
+
+    def calculate_avg_holding_period(self, df: pd.DataFrame) -> float:
+        """Calculate average holding period in minutes"""
+        return float(df['holding_period_minutes'].mean()) if 'holding_period_minutes' in df.columns else 0.0
+
+    def calculate_avg_trades_per_day(self, df: pd.DataFrame) -> float:
+        """Calculate average trades per day"""
+        trading_days = df['trade_date'].dt.date.nunique()
+        return float(len(df) / trading_days) if trading_days > 0 else 0.0
+
+    def get_date_range(self, df: pd.DataFrame) -> str:
+        """Get date range of trading data"""
+        start_date = df['trade_date'].min().strftime('%Y-%m-%d')
+        end_date = df['trade_date'].max().strftime('%Y-%m-%d')
+        return f"{start_date} to {end_date}"
+
+    def get_trading_days(self, df: pd.DataFrame) -> int:
+        """Get number of unique trading days"""
+        return int(df['trade_date'].dt.date.nunique())
 
     def calculate_max_drawdown(self, returns: pd.Series) -> Tuple[float, float]:
         # ###Calculate Maximum Drawdown###
         cumulative = (1 + returns).cumprod()
         running_max = cumulative.expanding().max()
         drawdown = (cumulative - running_max) / running_max
-
         max_dd = drawdown.min()
         max_dd_value = (cumulative.min() - running_max.max())
 
