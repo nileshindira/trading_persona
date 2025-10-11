@@ -7,7 +7,9 @@ import pandas as pd
 import numpy as np
 from typing import Dict
 import logging
+
 class TradingMetricsCalculator:
+    """Calculate comprehensive trading metrics"""
 
     def __init__(self, config: Dict):
         self.config = config
@@ -82,7 +84,7 @@ class TradingMetricsCalculator:
         if len(df) < 2:
             return 0.0
 
-        returns = df['pnl'] / df['trade_value']
+        returns = df['pnl'] / df['buy_value'].replace(0, np.nan)
 
         if returns.std() == 0:
             return 0.0
@@ -97,7 +99,7 @@ class TradingMetricsCalculator:
         if len(df) < 2:
             return 0.0
 
-        returns = df['pnl'] / df['trade_value']
+        returns = df['pnl'] / df['buy_value'].replace(0, np.nan)
 
         # Calculate downside deviation
         downside_returns = returns[returns < 0]
@@ -193,13 +195,3 @@ class TradingMetricsCalculator:
     def get_trading_days(self, df: pd.DataFrame) -> int:
         """Get number of unique trading days"""
         return int(df['trade_date'].dt.date.nunique())
-
-    def calculate_max_drawdown(self, returns: pd.Series) -> Tuple[float, float]:
-        # ###Calculate Maximum Drawdown###
-        cumulative = (1 + returns).cumprod()
-        running_max = cumulative.expanding().max()
-        drawdown = (cumulative - running_max) / running_max
-        max_dd = drawdown.min()
-        max_dd_value = (cumulative.min() - running_max.max())
-
-        return max_dd_value, max_dd * 100

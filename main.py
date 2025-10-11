@@ -9,7 +9,7 @@ import logging
 import argparse
 from pathlib import Path
 import sys
-
+import os
 from src.data_processor import TradingDataProcessor
 from src.metrics_calculator import TradingMetricsCalculator
 from src.pattern_detector import TradingPatternDetector
@@ -68,8 +68,9 @@ class TradingPersonaAnalyzer:
         
         # Pair trades for P&L
         logger.info("Pairing trades...")
-        df = self.data_processor.pair_trades(df)
-        
+        raw_df = df.copy()  # Keep original for pattern detection
+        df = self.data_processor.pair_trades(df, data_filepath)
+
         # Step 1.5: Add EMA scores (NEW FEATURE)
         ema_stats = None
         if include_ema and self.ema_enabled:
@@ -90,7 +91,8 @@ class TradingPersonaAnalyzer:
         if ema_stats:
             metrics['ema_allocation'] = ema_stats
         
-        # Step 3: Detect patterns
+
+        # Step 3: Detect patterns (use raw data)
         logger.info("Detecting patterns...")
         patterns = self.pattern_detector.detect_all_patterns(df)
         
